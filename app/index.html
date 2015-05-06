@@ -1,0 +1,524 @@
+<!doctype><html><head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Odyssey.js Torque</title>
+  <meta name="description" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="icon" type="image/x-icon" href="http://cartodb.github.io/odyssey.js/sandbox/favicon.png">
+  <link rel="icon" type="image/png" href="http://cartodb.github.io/odyssey.js/sandbox/favicon.png">
+
+  <link rel="stylesheet" href="http://cartodb-libs.global.ssl.fastly.net/cartodb.js/v3/themes/css/cartodb.css">
+  <link rel="stylesheet" href="http://cartodb.github.io/odyssey.js/sandbox/css/slides.css">
+  <style type="text/css">
+    body {
+      background: #000;
+    }
+    div.cartodb-timeslider {
+      background: #000 !important;
+      border-radius: 0;
+      height: 40px;
+      border: transparent;
+      padding: 10px;
+      box-shadow: 0 0 0;
+      box-sizing: content-box;
+      position: absolute;
+      left: 50% !important;
+      -webkit-transform: translatex(-50%);
+      -ms-transform: translatex(-50%);
+      transform: translatex(-50%);
+    }
+    #slides_container {
+      background: transparent;
+      width: 400;
+    }
+    #slides_container a {
+      color: #000;
+      text-decoration: none;
+      background-color: white;
+      padding: 0px 4px;
+    }
+    #slides_container h1, #slides_container h2, #slides_container h3, #slides_container h4, #slides_container h5, #slides_container h6{
+      color: white;
+      font-weight: bold;
+    }
+    #slides_container h1::after {
+      background-color: transparent;
+    }
+    #slides_container p, #slides_container span  {
+      font-family: helvetica, arial, sans-serif;
+      color: white;
+      font-size: 20px;
+      line-height: 27px;
+      margin: 0 0 10px 0; 
+    }
+    .leaflet-control-zoom {
+      display: none;
+    }
+    #credits {
+      display: none;
+    }
+    .leaflet-marker-pane {
+      display: none;
+    }
+    .slide-tip {
+      border-bottom-color: transparent;
+    }
+    .slide-tip:after {
+      z-index: 0;
+      position: relative;
+      background: #666;
+    }
+    div.cartodb-timeslider a.button::after {
+      content: '';
+      position: relative;
+      display: block;
+      border: 2px solid #cacaca;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      top: -2px;
+      left: 2px;
+    }
+    div.cartodb-timeslider ul li {
+      border: 0;
+    }
+
+  </style>
+  <script src="http://cartodb.github.io/odyssey.js/vendor/modernizr-2.6.2.min.js"></script>
+</head>
+<body>
+  <div id="map" style="width: 100%; height: 100%"></div>
+  <div id="slides_container" style="">
+    <div id="slides">
+    </div>
+  </div>
+  <div id="credits">
+    <span class="title" id="title">Title</span>
+    <span class="author"><b id="author">By Name using</b> <a href="#">Odyssey.js</a><span>
+  </span></span></div>
+
+  <script src="http://maps.googleapis.com/maps/api/js?sensor=false"></script>
+  <script src="http://cartodb-libs.global.ssl.fastly.net/cartodb.js/v3/cartodb.js"></script>
+  <script src="http://cartodb.github.io/odyssey.js/dist/odyssey.js" charset="UTF-8"></script>
+
+  <script>
+    var resizePID;
+
+    function clearResize() {
+      clearTimeout(resizePID);
+      resizePID = setTimeout(function() { adjustSlides(); }, 100);
+    }
+
+    if (!window.addEventListener) {
+      window.attachEvent("resize", function load(event) {
+        clearResize();
+      });
+    } else {
+      window.addEventListener("resize", function load(event) {
+        clearResize();
+      });
+    }
+
+    function resizeWindow() {
+      adjustSlides();
+    }
+
+    function adjustSlides() {
+      var container = document.getElementById("slides_container"),
+          slide = document.querySelectorAll('.selected_slide')[0];
+
+      if (container && slide) {
+        if (slide.offsetHeight+80+40+160 >= window.innerHeight) {
+          container.style.bottom = "160px";
+          var h = container.offsetHeight;
+
+          slide.style.height = h-80+"px";
+        } else {
+          container.style.bottom = "auto";
+          container.style.minHeight = "0";
+          slide.style.height = "auto";
+        }
+      }
+    }
+
+    var resizeAction = O.Action(function() {
+      adjustSlides();
+    });
+
+    function torque(layer) {
+      function _torque() {}
+
+      _torque.reach = function (slide) {
+        var i = slide.get('step').value;
+
+        function formaterForRange(start, end) {
+          start = start.getTime ? start.getTime(): start;
+          end = end.getTime ? end.getTime(): end;
+          var span = (end - start)/1000;
+          var ONE_DAY = 3600*24;
+          var ONE_YEAR = ONE_DAY * 31 * 12;
+          function pad(n) { return n < 10 ? '0' + n : n; };
+
+          // lest than a day
+          if (span < ONE_DAY) return function(t) { return pad(t.getUTCHours()) + ":" + pad(t.getUTCMinutes()); };
+          if (span < ONE_YEAR) return function(t) { return pad(t.getUTCMonth() + 1) + "/" + pad(t.getUTCDate()) + "/" + pad(t.getUTCFullYear()); };
+          return function(t) { return pad(t.getUTCMonth() + 1) + "/" + pad(t.getUTCFullYear()); };
+        }
+
+        function getTimeOrStep(s) {
+          var tb = layer.getTimeBounds();
+          if (!tb) return;
+          if (tb.columnType === 'date') {
+            if (tb && tb.start !== undefined) {
+              var f = formaterForRange(tb.start, tb.end);
+              // avoid showing invalid dates
+              if (!_.isNaN(layer.stepToTime(s).getYear())) {
+                return f(layer.stepToTime(s));
+              }
+            }
+          } else {
+            return s;
+          }
+        }
+
+        function truncate(s, length) {
+          return s.substr(0, length-1) + (s.length > length ? '…' : '');
+        }
+
+        var parser = new DOMParser(),
+            doc = parser.parseFromString(slide.html(), 'text/html');
+
+        var l = i*$('.slider').width()/layer.options.steps,
+            tooltip = ['<div class="slide-tip slide-tip-'+i+'" style="left:'+l+'px">',
+                       '<div class="tooltip">',
+                       '<h1>'+getTimeOrStep(i)+'</h1>',
+                       $(doc).find('h1').text(),
+                       '</div>',
+                       '</div>'].join("\n");
+
+        $('.slider').append(tooltip);
+        var $tip = $('.slide-tip-'+i+' .tip'),
+            $tooltip = $('.slide-tip-'+i+' .tooltip'),
+            w = $tip.width()/2
+
+        $tip.css({ margin: -w });
+
+        var t = O.Trigger({});
+
+        function check(changes) {
+          if (changes.step >= i-2 && changes.step < i+2) {
+            t.trigger();
+
+            if (!$tooltip.is(':visible')) {
+              $tooltip.fadeIn(150);
+            }
+          } else if (changes.step >= i+2 && changes.step < i+5) {
+            setTimeout(function() {
+              $('.tooltip').fadeOut(150);
+            }, 2000);
+          }
+        };
+
+        layer.on('change:time', check);
+        t.clear = function() {
+          layer.off('change:time', check);
+        }
+        return t;
+      }
+
+      _torque.pause = function() {
+        return O.Action(function (){
+          layer.pause();
+        });
+      }
+
+      _torque.play = function() {
+        return O.Action(function () {
+          layer.play()
+        });
+      }
+
+      return _torque;
+    }
+
+    O.Template({
+      actions: {
+        'insert time': function() {
+          return "- step: " + this.torqueLayer.getStep()
+        },
+        'pause': function() {
+          return "S.torqueLayer.actions.pause()";
+        },
+        'play': function() {
+          return "S.torqueLayer.actions.play()";
+        }
+      },
+
+      init: function() {
+        var self = this;
+
+        var baseurl = this.baseurl = 'http://{s}.api.cartocdn.com/base-light/{z}/{x}/{y}.png';
+        var map = this.map = L.map('map').setView([0, 0.0], 4);
+        var basemap = this.basemap = L.tileLayer(baseurl, {
+          attribution: 'data OSM - map CartoDB'
+        }).addTo(map);
+        this.duration = '18';
+
+        var slides = this.slides = O.Actions.Slides('slides');
+        var story = this.story = O.Story()
+      },
+
+      _resetActions: function(actions) {
+        // update footer title and author
+        var title_ = actions.global.title === undefined ? '' : actions.global.title,
+            author_ = actions.global.author === undefined ? 'Using' : 'By '+actions.global.author+' using';
+
+        document.getElementById('title').innerHTML = title_;
+        document.getElementById('author').innerHTML = author_;
+        document.title = title_ + " | " + author_ +' Odyssey.js';
+
+        document.getElementById('slides_container').style.display = "block";
+
+        document.getElementById('slides').innerHTML = '';
+
+        // first slide is the header, skip it
+        for(var i = 0; i < actions.length; ++i) {
+          var slide = actions[i];
+          var tmpl = "<div class='slide' style='display:none'>"
+          tmpl += slide.html();
+          tmpl += "</div>";
+
+          document.getElementById('slides').innerHTML += tmpl;
+
+          var ac = O.Parallel(
+            O.Actions.CSS($("#slides_container")).addClass('visible'),
+            this.slides.activate(i),
+            slide(this),
+            resizeAction
+          );
+
+          if (!slide.get('step')) return;
+
+          this.story.addState(
+            torque(this.torqueLayer).reach(slide),
+            ac
+          )
+        }
+      },
+
+      update: function(actions) {
+        var self = this;
+
+        if ($("#slides_container").hasClass("visible")) {
+          $("#slides_container").removeClass("visible");
+        }
+
+        if (this.baseurl && (this.baseurl !== actions.global.baseurl)) {
+          this.baseurl = actions.global.baseurl || 'http://0.api.cartocdn.com/base-light/{z}/{x}/{y}.png';
+
+          this.basemap.setUrl(this.baseurl);
+        }
+
+        if (this.duration && (this.duration !== actions.global.duration)) {
+          this.duration = actions.global.duration || 18;
+        }
+
+        if (this.torqueLayer && ("http://"+self.torqueLayer.options.user+".cartodb.com/api/v2/viz/"+self.torqueLayer.options.stat_tag+"/viz.json" !== actions.global.vizjson)) {
+          this.map.removeLayer(this.torqueLayer);
+
+          // hack to stop (not remove) binding
+          this.torqueLayer.stop();
+          $('.cartodb-timeslider').remove();
+          $('.cartodb-legend-stack').remove();
+          this.torqueLayer = null;
+          this.created = false;
+        }
+
+        if (!this.torqueLayer) {
+          if (!this.created) { // sendCode debounce < vis loader
+            cdb.vis.Loader.get(actions.global.vizjson, function(vizjson) {
+              // find index for the torque layer
+              function torqueLayerIndex() {
+                for(var i = 0; i < vizjson.layers.length; ++i) {
+                  if (vizjson.layers[i].type === 'torque') return i;
+                }
+                return -1;
+              }
+              var torqueIndex = torqueLayerIndex();
+              if (torqueIndex >= 0) {
+                cartodb.createLayer(self.map, vizjson, { layerIndex: torqueIndex })
+                  .done(function(layer) {
+                    self.map.fitBounds(vizjson.bounds);
+
+                    actions.global.duration && layer.setDuration(actions.global.duration);
+
+                    self.torqueLayer = layer;
+                    self.torqueLayer.stop();
+
+                    self.map.addLayer(self.torqueLayer);
+
+                    self.torqueLayer.on('change:steps', function() {
+                      self.torqueLayer.play();
+                      self.torqueLayer.actions = torque(self.torqueLayer);
+                      self._resetActions(actions);
+                    });
+                  }).on('error', function(err) {
+                    console.log("some error occurred: " + err);
+                  });
+                }
+            });
+
+            this.created = true;
+          }
+
+          return;
+        }
+
+        this.story.clear();
+
+        $('.slide-tip').remove();
+
+        this._resetActions(actions);
+
+        if (this.created) {
+          this.torqueLayer.setDuration(actions.global.duration);
+          this.torqueLayer.stop();
+          $('.button').removeClass('stop');
+        }
+      }
+    });
+  </script>
+
+  <script>
+    (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+    (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+    m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+    ga('create', 'UA-20934186-21', 'cartodb.github.io');
+    ga('send', 'pageview');
+  </script>
+
+
+
+<script id="md_template" type="text/template">```
+-baseurl: "https://{s}.tiles.mapbox.com/v4/smbtc.k3df4488/{z}/{x}/{y}.png?access_token=pk.eyJ1Ijoic21idGMiLCJhIjoiVXM4REppNCJ9.pjaLujYj-fcCPv5evG_0uA#7"
+-title: "Black saturday"
+-author: "Simbiotica"
+-vizjson: "http://simbiotica.cartodb.com/api/v2/viz/b865dcfc-59ff-11e4-a445-0e4fddd5de28/viz.json"
+-duration: 110
+```
+
+
+# Melbourne
+```
+- step: 0
+- zoom: 8
+- center: [-37.8602828,145.079616]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+A number of bushfires broke out across Victoria State on Saturday 7th February; it became known as Black Saturday, Australia’s worst natural disaster. This visualization will look at the main fires that took place leading up to, during and after that day. 
+
+[Click here for more information](http://royalcommission.vic.gov.au/Commission-Reports/Final-Report.html)
+
+# Darlimurla
+```
+-step: 150
+-center: [-38.3705884, 146.1954857]
+-zoom: 12
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+Before Black Saturday, there were a number of fires in the Delburn area. They were started in late January and broke containment lines on January 30th. It was contained by 3rd February, and did not break containment lines on Black Saturday itself. 
+
+![Warrandyte](http://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/2009_Victorian_bushfires_smoke_Warrandyte.JPG/220px-2009_Victorian_bushfires_smoke_Warrandyte.JPG)
+
+# Bunyip
+```
+- step: 245
+- zoom: 12
+- center: [-37.900567, 145.750894]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+Fires in the Bunyip State Park had been starting in the week leading up to Black Saturday, caused by lightning strikes in the area. The fires starting on 5th February broke through containment lines. The fire crossed the park boundary at lunchtime on Black Saturday and moved towards residential areas. Around 45% of the park was burnt.
+
+# Kilmore East
+```
+- step: 270
+- zoom: 10
+- center: [-37.5709839, 145.3556652]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+The Kilmore East fire started just before lunchtime when power lines fell and sparked a fire, which consumed much of Kinglake National Park: 98% of the land was severely burnt, including Australia’s tallest tree. It was one of the worst affected areas, with the town of Kinglake being particularly badly hit.
+
+Karren Barrow was crew leader for one of the crews that attended fires across the Kinglake area: [she tells her story of the day here] (http://vol4.royalcommission.vic.gov.au/indexc400.html?pid=178)  
+
+![Kilmore East Fire](http://resources3.news.com.au/images/2014/07/15/1226989/294911-9b6ee86a-0bac-11e4-a510-9f89e2418c8b.jpg) 
+
+# Murrindindi Mill
+```
+- step: 290
+- zoom: 10
+- center: [-37.5709839, 145.3556652]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+The Murrindindi Mill fire started in the early afternoon of Black Saturday and burned through a large area of the Toolangi State Forest; fortunately many areas of the forest survived. Many people in the area have told their story of how they fought the fires as they spread through the towns of Buxton, Marysville and Narbethong: [you can read their stories here]
+(http://vol4.royalcommission.vic.gov.au/index283a.html?pid=31)
+
+# Beechworth
+```
+- step: 330
+- zoom: 10
+- center: [-36.486508, 146.661855]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+The Beechworth-Mudgegonga fire was ignited by a fallen power line on the evening of Black Saturday, and destroyed about 23,000ha (3%) of land in the Alpine National Park. The fire started slow as it burned areas where there had previously been fires and clearance of wood, but once it spread it became more aggressive.
+
+# Wilsons Promontory
+```
+- step: 380
+- zoom: 10
+- center: [-38.9235911, 146.3364551]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+Lightning started a fire in the Wilsons Promontory National Park the day after Black Saturday, burning around 50% of land in the park. As much of the park was inaccessible and there was a significant amount of wood fuel in the forest, it was evacuated. The fires burned for nearly a month after. 
+
+# Maroondah/ Yarra
+```
+- step: 450
+- zoom: 10
+- center: [-37.4608091, 145.6749052]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+The Maroondah/ Yarra fires were a part of the larger Kilburn East and Murrindindi Mine Complex of fires. They started a couple of days after Black Saturday, on 10th February. The strong winds were blowing embers from the fires, which threatened many towns nearby. 
+
+# BLACK SATURDAY
+```
+- step: 550
+- zoom: 7
+- center: [-37.444456, 143.45860]
+S.torqueLayer.actions.pause()
+O.Actions.Sleep(4500)
+S.torqueLayer.actions.play()
+```
+Saturday, 7 February 2009
+
+ In total there were around 13 different fire complexes on Black Saturday and the days afterwards. They claimed the lives of 173 people and led to the burning of 78,000ha of protected areas.
+
+</script></body></html>
